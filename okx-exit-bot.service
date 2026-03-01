@@ -1,0 +1,29 @@
+# Ubuntu systemd 服务配置
+# 使用方法：
+#   sudo cp okx-exit-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable okx-exit-bot
+#   sudo systemctl start okx-exit-bot
+#   sudo systemctl status okx-exit-bot
+#   sudo journalctl -u okx-exit-bot -f   # 查看实时日志
+
+[Unit]
+Description=OKX Exit Bot - 合约止损止盈机器人
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 修改为实际的部署用户名
+User=ubuntu
+# 修改为实际的项目目录
+WorkingDirectory=/home/ubuntu/okx-exit-bot
+ExecStart=/home/ubuntu/okx-exit-bot/.venv/bin/python3 main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/okx-exit-bot/bot.log
+StandardError=append:/home/ubuntu/okx-exit-bot/bot.log
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

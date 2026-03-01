@@ -1,0 +1,19 @@
+# OKX 止损止盈机器人配置
+# 支持最多 5 个合约，每个合约独立配置 K 线周期
+
+contracts:
+  - instId: "BTC-USDT-SWAP"
+    timeframe: "15m"
+  - instId: "ETH-USDT-SWAP"
+    timeframe: "60m"
+  - instId: "SOL-USDT-SWAP"
+    timeframe: "5m"
+  - instId: "XRP-USDT-SWAP"
+    timeframe: "4h"
+  - instId: "BNB-USDT-SWAP"
+    timeframe: "1d"
+
+# 持仓方向模式
+# long_short: 双向持仓（开多/开空分开）
+# net: 单向持仓
+pos_side_mode: "long_short"
