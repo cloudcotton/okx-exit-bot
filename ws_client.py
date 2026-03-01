@@ -14,7 +14,7 @@ from websockets.exceptions import ConnectionClosed
 
 logger = logging.getLogger(__name__)
 
-_WS_PUBLIC_URL = "wss://ws.okx.com:8443/ws/v5/public"
+_WS_PUBLIC_URL = "wss://ws.okx.com:8443/ws/v5/business"
 
 # 重连等待时间（秒），断线后逐步增加
 _RECONNECT_DELAYS = [3, 5, 10, 30, 60]
