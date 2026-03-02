@@ -272,3 +272,6 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("收到退出信号，程序停止。")
+    except Exception:
+        logger.exception("未捕获的异常，程序退出：")
+        sys.exit(1)

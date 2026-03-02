@@ -54,6 +54,8 @@ class AppConfig:
     demo: bool
     contracts: List[ContractConfig]
     pos_side_mode: str
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
 
 def load_config(path: str = "config.yaml") -> AppConfig:
@@ -84,4 +86,6 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         demo=os.environ.get("OKX_DEMO", "false").lower() == "true",
         contracts=contracts,
         pos_side_mode=data.get("pos_side_mode", "long_short"),
+        telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+        telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", ""),
     )
