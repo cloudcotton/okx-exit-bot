@@ -84,7 +84,8 @@ class OKXWebSocketClient:
 
         while True:
             delay = _RECONNECT_DELAYS[min(attempt, len(_RECONNECT_DELAYS) - 1)]
-            if attempt > 0:
+            is_reconnect = attempt > 0
+            if is_reconnect:
                 logger.info("等待 %d 秒后重连...", delay)
                 await asyncio.sleep(delay)
 
@@ -99,8 +100,8 @@ class OKXWebSocketClient:
                     logger.info("WebSocket 已连接: %s", _WS_PUBLIC_URL)
                     await self._subscribe(ws)
 
-                    # 重连后通知调用方重新加载历史K线
-                    if self._on_reconnect is not None:
+                    # 仅在真正重连时通知调用方重新加载历史K线（首次连接跳过）
+                    if is_reconnect and self._on_reconnect is not None:
                         await self._on_reconnect()
 
                     async for message in ws:
