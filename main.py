@@ -15,6 +15,7 @@ OKX 合约止损止盈机器人
 import asyncio
 import logging
 import sys
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -23,6 +24,7 @@ from kline_manager import KlineManager
 from strategy import check_signal, CLOSE_LONG, CLOSE_SHORT
 from okx_rest import OKXRestClient
 from ws_client import OKXWebSocketClient
+from notifier import TelegramNotifier
 
 # ──────────────────────────────────────────────────────────────────────────── #
 #  日志配置（时间戳使用 UTC+8）                                                  #
@@ -58,6 +60,10 @@ logger = logging.getLogger(__name__)
 
 # key: (inst_id, signal_type)
 _in_flight: set = set()
+
+# 冷却计时：同一信号触发后 N 秒内不再重复调用，避免频率限制
+_signal_cooldown: dict = {}   # key: (inst_id, signal) -> monotonic time
+_COOLDOWN_SECS = 30
 
 
 # ──────────────────────────────────────────────────────────────────────────── #
@@ -106,9 +112,10 @@ async def execute_close(
     inst_id: str,
     signal: str,
     pos_side_mode: str,
+    notifier: "TelegramNotifier",
 ):
     """
-    查询持仓，若持有对应方向头寸则执行平仓。
+    查询持仓，若持有对应方向头寸则执行平仓，并发送通知。
     """
     positions = await rest_client.get_positions(inst_id)
     if not positions:
@@ -142,7 +149,17 @@ async def execute_close(
                 "执行平仓: %s %s（%s 模式，可用=%s 手）",
                 inst_id, direction, mgn_mode, avail_pos,
             )
-            await rest_client.close_position(inst_id, mgn_mode, pos_side)
+            ok = await rest_client.close_position(inst_id, mgn_mode, pos_side)
+            if ok:
+                now = datetime.now(tz=_TZ_CST).strftime("%Y-%m-%d %H:%M:%S")
+                msg = (
+                    f"🔔 <b>平仓通知</b>\n"
+                    f"合约：{inst_id}\n"
+                    f"方向：{direction}\n"
+                    f"可用：{avail_pos} 手\n"
+                    f"时间：{now}"
+                )
+                await notifier.send(msg)
 
 
 # ──────────────────────────────────────────────────────────────────────────── #
@@ -153,6 +170,7 @@ def make_candle_handler(
     kline_manager: KlineManager,
     rest_client: OKXRestClient,
     pos_side_mode: str,
+    notifier: "TelegramNotifier",
 ):
     """
     工厂函数，返回 WebSocket 推送 K 线数据时的回调协程。
@@ -181,10 +199,17 @@ def make_candle_handler(
         key = (inst_id, signal)
         if key in _in_flight:
             return
+
+        # 冷却检查：上次触发后 30 秒内不重复
+        now = time.monotonic()
+        if now - _signal_cooldown.get(key, 0) < _COOLDOWN_SECS:
+            return
+
         _in_flight.add(key)
+        _signal_cooldown[key] = now
 
         try:
-            await execute_close(rest_client, inst_id, signal, pos_side_mode)
+            await execute_close(rest_client, inst_id, signal, pos_side_mode, notifier)
         except Exception as e:
             logger.exception("平仓异常 %s %s: %s", inst_id, signal, e)
         finally:
@@ -213,6 +238,12 @@ async def main():
         config.api_key, config.secret_key, config.passphrase, config.demo,
     )
     kline_manager = KlineManager()
+    notifier      = TelegramNotifier(config.telegram_bot_token, config.telegram_chat_id)
+
+    if notifier.enabled:
+        logger.info("Telegram 通知已启用（chat_id=%s）", config.telegram_chat_id)
+    else:
+        logger.info("Telegram 通知未配置，跳过通知")
 
     # 初始化历史K线缓冲区
     await init_kline_buffers(config, rest_client, kline_manager)
@@ -225,7 +256,7 @@ async def main():
         await init_kline_buffers(config, rest_client, kline_manager)
 
     ws_client = OKXWebSocketClient(
-        on_candle=make_candle_handler(kline_manager, rest_client, config.pos_side_mode),
+        on_candle=make_candle_handler(kline_manager, rest_client, config.pos_side_mode, notifier),
         on_reconnect=on_reconnect,
     )
 
