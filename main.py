@@ -15,6 +15,7 @@ OKX 合约止损止盈机器人
 import asyncio
 import logging
 import sys
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from config import load_config, AppConfig, ContractConfig
@@ -24,17 +25,31 @@ from okx_rest import OKXRestClient
 from ws_client import OKXWebSocketClient
 
 # ──────────────────────────────────────────────────────────────────────────── #
-#  日志配置                                                                     #
+#  日志配置（时间戳使用 UTC+8）                                                  #
 # ──────────────────────────────────────────────────────────────────────────── #
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("bot.log", encoding="utf-8"),
-    ],
-)
+_TZ_CST = timezone(timedelta(hours=8))
+
+
+class _CSTFormatter(logging.Formatter):
+    """将日志时间戳转换为 UTC+8 (CST) 显示。"""
+
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, tz=_TZ_CST)
+        return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S")
+
+
+def _make_handler(handler: logging.Handler) -> logging.Handler:
+    handler.setFormatter(_CSTFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    return handler
+
+
+logging.basicConfig(level=logging.INFO, handlers=[])   # 清空默认 handler
+_root = logging.getLogger()
+_root.setLevel(logging.INFO)
+_root.addHandler(_make_handler(logging.StreamHandler(sys.stdout)))
+_root.addHandler(_make_handler(logging.FileHandler("bot.log", encoding="utf-8")))
+
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────── #
@@ -144,6 +159,16 @@ def make_candle_handler(
     """
 
     async def on_candle(channel: str, inst_id: str, raw: list):
+        # K 线完成时记录一次 OHLC
+        if raw[8] == "1":
+            bar_ts = datetime.fromtimestamp(int(raw[0]) / 1000, tz=_TZ_CST)
+            logger.info(
+                "K线完成 %s %s | %s  O=%s H=%s L=%s C=%s",
+                inst_id, channel,
+                bar_ts.strftime("%Y-%m-%d %H:%M"),
+                raw[1], raw[2], raw[3], raw[4],
+            )
+
         # 更新缓冲区，获取当前价格
         current_price = kline_manager.update(inst_id, channel, raw)
 

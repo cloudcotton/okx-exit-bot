@@ -13,11 +13,8 @@
   两个条件同时满足才触发平多，平空逻辑对称。
 """
 
-import logging
 from typing import Optional
 from kline_manager import KlineManager
-
-logger = logging.getLogger(__name__)
 
 CLOSE_LONG  = "close_long"
 CLOSE_SHORT = "close_short"
@@ -36,10 +33,6 @@ def check_signal(
     buf = kline_manager.get_buffer(inst_id, channel)
 
     if not buf.ready():
-        logger.debug(
-            "%s %s: K线数据不足，已有 %d/2 根完成K线",
-            inst_id, channel, len(buf.completed),
-        )
         return None
 
     data = buf.get_signal_data(current_price)
@@ -50,20 +43,10 @@ def check_signal(
 
     # 平多：当前tick创下Kn新低，且该低点低于前两根K线的低点
     if current_price <= kn_low and current_price < prev2_low:
-        bars = list(buf.completed)
-        logger.info(
-            "【平多信号】%s %s | 当前价=%.6f  Kn.low=%.6f  K-1.low=%.6f  K-2.low=%.6f",
-            inst_id, channel, current_price, kn_low, bars[1].low, bars[0].low,
-        )
         return CLOSE_LONG
 
     # 平空：当前tick创下Kn新高，且该高点高于前两根K线的高点
     if current_price >= kn_high and current_price > prev2_high:
-        bars = list(buf.completed)
-        logger.info(
-            "【平空信号】%s %s | 当前价=%.6f  Kn.high=%.6f  K-1.high=%.6f  K-2.high=%.6f",
-            inst_id, channel, current_price, kn_high, bars[1].high, bars[0].high,
-        )
         return CLOSE_SHORT
 
     return None
